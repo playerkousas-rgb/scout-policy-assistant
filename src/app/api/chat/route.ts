@@ -2,39 +2,41 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/embedding'
 import { getEmbeddings } from '@/lib/cohere'
 
-// 批量向量化文檔
 export async function POST(request: NextRequest) {
   try {
-    const { chunks } = await request.json()
+    const body = await request.json()
+    const chunks: Array<{
+      text: string
+      folder: string
+      file: string
+      title: string
+      date?: string
+      project?: string
+    }> = body.chunks
 
     if (!chunks || !Array.isArray(chunks) || chunks.length === 0) {
-      return NextResponse.json(
-        { error: '請提供要向量化的內容' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '請提供要向量化的內容' }, { status: 400 })
     }
 
-    // 批次生成向量（最多 96 個一批，Cohere 限制）
-    const results = []
+    const results: Array<{ success: boolean; text: string; id?: string; error?: string }> = []
     const batchSize = 96
-    
+
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize)
       const texts = batch.map(c => c.text)
-      
+
       console.log(`Processing batch ${Math.floor(i / batchSize) + 1}, ${batch.length} chunks...`)
-      
+
       try {
         const embeddings = await getEmbeddings(texts)
-        
-        // 存入資料庫
-        const insertData = batch.map((chunkItem, idx) => ({
-          project: chunkItem.project || 'policy',
-          source_folder: chunkItem.folder,
-          source_file: chunkItem.file,
-          doc_title: chunkItem.title,
-          doc_date: chunkItem.date || null,
-          chunk_text: chunkItem.text,
+
+        const insertData = batch.map((item: typeof batch[0], idx: number) => ({
+          project: item.project || 'policy',
+          source_folder: item.folder,
+          source_file: item.file,
+          doc_title: item.title,
+          doc_date: item.date || null,
+          chunk_text: item.text,
           embedding: embeddings[idx]
         }))
 
@@ -45,31 +47,17 @@ export async function POST(request: NextRequest) {
 
         if (error) {
           console.error('Insert error:', error)
-          // 批量插入失敗，回報第一個chunk的資訊
-          results.push({ 
-            success: false, 
-            text: batch[0]?.text?.substring(0, 50) || 'unknown',
-            error: error.message 
-          })
+          results.push({ success: false, text: batch[0].text.substring(0, 50), error: error.message })
         } else {
-          // 成功，每個chunk都回報
-          batch.forEach((chunkItem, idx) => {
-            results.push({ 
-              success: true, 
-              id: data?.[idx]?.id, 
-              text: chunkItem.text.substring(0, 50)
-            })
+          batch.forEach((item: typeof batch[0], idx: number) => {
+            results.push({ success: true, id: data?.[idx]?.id, text: item.text.substring(0, 50) })
           })
         }
-      } catch (batchError: unknown) {
+      } catch (batchError) {
+        const msg = batchError instanceof Error ? batchError.message : 'Unknown error'
         console.error('Batch error:', batchError)
-        const errorMsg = batchError instanceof Error ? batchError.message : 'Unknown error'
-        batch.forEach(chunkItem => {
-          results.push({ 
-            success: false, 
-            text: chunkItem.text.substring(0, 50),
-            error: errorMsg
-          })
+        batch.forEach((item: typeof batch[0]) => {
+          results.push({ success: false, text: item.text.substring(0, 50), error: msg })
         })
       }
     }
@@ -83,13 +71,9 @@ export async function POST(request: NextRequest) {
       failed: chunks.length - successCount,
       results
     })
-
-  } catch (error: unknown) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : '向量化失敗'
     console.error('Embed error:', error)
-    const errorMsg = error instanceof Error ? error.message : '向量化失敗'
-    return NextResponse.json(
-      { error: errorMsg },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
