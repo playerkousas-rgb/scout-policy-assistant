@@ -2,57 +2,64 @@
 
 ## 前置準備
 
-### 已完成
-- ✅ Supabase 專案建立
-- ✅ 資料庫 Schema 設定
-- ✅ Storage bucket 建立
-- ✅ Next.js 專案建立
+### 1. 申請 API Key（需要 VPN）
 
-### 需要設定
+| 服務 | 申請連結 | 額度 |
+|------|----------|------|
+| **Groq** | https://console.groq.com/ | 免費、無限制 |
+| **Cohere** | https://dashboard.cohere.com/ | 免費 1000次/月 |
 
-#### 1. Groq API（免費、無限制）
-1. 前往 https://console.groq.com/
-2. 免費註冊/登入
-3. 建立 API Key
-4. 複製到 `.env.local` 的 `GROQ_API_KEY`
+### 2. 在 Vercel 設定環境變數
 
-#### 2. Cohere API（免費 1000次/月）
-1. 前往 https://dashboard.cohere.com/
-2. 免費註冊/登入
-3. 建立 API Key
-4. 複製到 `.env.local` 的 `COHERE_API_KEY`
-
----
-
-## 環境變數設定
-
-在專案根目錄建立 `.env.local` 檔案：
-
-```bash
-# Supabase（已設定）
+```
 NEXT_PUBLIC_SUPABASE_URL=https://uegilkoftrqugcmgfnkn.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1Z2lsa29mdHJxdWdjbWlnZm4iLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY1MjgwMTYyOCwiZXhwIjoxOTY4Mzc3NjI4fQ.placeholder
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
-
-# Groq（負責回答）
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxx
-
-# Cohere（負責向量化）
-COHERE_API_KEY=xxxxxxxxxxxxxxxxxxxxx
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+GROQ_API_KEY=your_groq_key
+COHERE_API_KEY=your_cohere_key
 ```
 
----
-
-## 向量搜尋函數
-
-在 Supabase SQL Editor 執行以下 SQL：
+### 3. 執行 SQL（在 Supabase SQL Editor）
 
 ```sql
+-- 開啟 pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 建立主資料表
+CREATE TABLE document_chunks (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  project       TEXT NOT NULL,
+  source_folder TEXT NOT NULL,
+  source_file   TEXT NOT NULL,
+  doc_title     TEXT NOT NULL,
+  doc_date      DATE,
+  chunk_text    TEXT NOT NULL,
+  embedding     vector(768),
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- 建立索引
+CREATE INDEX ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX ON document_chunks (project);
+CREATE INDEX ON document_chunks (source_folder);
+
+-- 建立 Storage bucket
+INSERT INTO storage.buckets (id, name, public) VALUES ('policy-docs', 'policy-docs', true);
+INSERT INTO storage.buckets (id, name, public) VALUES ('syllabus-docs', 'syllabus-docs', true);
+INSERT INTO storage.buckets (id, name, public) VALUES ('uniform-docs', 'uniform-docs', true);
+INSERT INTO storage.buckets (id, name, public) VALUES ('form-docs', 'form-docs', true);
+
+-- 設定 Storage 權限
+CREATE POLICY "Allow public read" ON storage.objects
+  FOR SELECT USING (bucket_id IN ('policy-docs', 'syllabus-docs', 'uniform-docs', 'form-docs'));
+
+-- 向量搜尋函數
 CREATE OR REPLACE FUNCTION match_documents(
   query_embedding vector(768),
   match_threshold float DEFAULT 0.7,
   match_count int DEFAULT 5,
-  project_filter text DEFAULT NULL
+  project_filter text DEFAULT NULL,
+  folder_filter text DEFAULT NULL
 )
 RETURNS TABLE (
   id uuid,
@@ -74,6 +81,7 @@ BEGIN
   FROM document_chunks dc
   WHERE
     (project_filter IS NULL OR dc.project = project_filter)
+    AND (folder_filter IS NULL OR dc.source_folder = folder_filter)
     AND 1 - (dc.embedding <=> query_embedding) > match_threshold
   ORDER BY dc.embedding <=> query_embedding
   LIMIT match_count;
@@ -83,49 +91,220 @@ $$;
 
 ---
 
-## 本地測試
+## 📁 資料夾架構（共用資料庫）
 
-```bash
-cd scout-policy-assistant
-npm run dev
+所有專案共用同一個 Supabase 專案，透過 `source_folder` 區分不同來源。
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Supabase 資料庫 (scout-assistants)                   │
+│                                                                             │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                    document_chunks（統一資料表）                      │   │
+│   │                                                                      │   │
+│   │   project='policy'     │  policy-assistant 用                        │   │
+│   │   project='syllabus'   │  syllabus-assistant 用                      │   │
+│   │   project='uniform'    │  uniform-assistant 用（制服）               │   │
+│   │   project='form'       │  form-assistant 用（表格）                  │   │
+│   │                                                                      │   │
+│   │   搜尋時用 project + source_folder 過濾                               │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                    Supabase Storage（檔案備份）                       │   │
+│   │                                                                      │   │
+│   │   policy-docs/    ← Policy 專案的 PDF                                │   │
+│   │   syllabus-docs/  ← Syllabus 專案的 PDF                              │   │
+│   │   uniform-docs/   ← Uniform 專案的 PDF                               │   │
+│   │   form-docs/      ← Form 專案的 PDF                                 │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-打開 http://localhost:3000
+---
+
+### 📂 Policy（政策及指引）
+
+**目標用戶**：領袖、成員  
+**系統**：[scout-policy-assistant.vercel.app](https://scout-policy-assistant.vercel.app/)  
+**Project 標記**：`policy`
+
+```
+policy-docs/                    ← Storage
+│
+├── POR/                        ← source_folder: 'POR'
+│   ├── POR_C_20251114_.pdf
+│   └── constitution.pdf
+│
+├── circulars/policy/           ← source_folder: 'circulars/policy'
+│   ├── PC012026C_性罪行定罪紀錄查核.pdf
+│   ├── PC062025C_保護童軍成員政策.pdf
+│   └── ...
+│
+├── circulars/admin/            ← source_folder: 'circulars/admin'
+│   ├── ACR012026C_總會通告年度檢視.pdf
+│   ├── AC032026C_童軍旅財政管理指引.pdf
+│   └── ...
+│
+├── circulars/activity/         ← source_folder: 'circulars/activity'
+│   ├── P022-26_新修訂支部訓練綱要.pdf
+│   └── ...
+│
+├── subsidy/                    ← source_folder: 'subsidy'
+│   ├── 起動資助計劃.pdf
+│   └── 活動資助.pdf
+│
+└── general/                    ← source_folder: 'general'
+    └── 其他指引.pdf
+```
 
 ---
 
-## 使用流程
+### 📂 Syllabus（訓練綱要）
 
-### 1. 上傳政策文件
-- 在「上傳文件」頁面上傳 PDF 到 Supabase Storage
+**目標用戶**：領袖、成員  
+**系統**：scout-syllabus-assistant（待建立）  
+**Project 標記**：`syllabus`
 
-### 2. 向量化內容
-- 在「向量化」頁面貼上文件內容
-- 選擇正確的分類（POR / 通告 / 表格 / 資助）
-- 點擊「向量化」
-
-### 3. 開始問答
-- 在「問答」頁面輸入問題
-- 系統會自動搜尋相關內容並回答
+```
+syllabus-docs/                  ← Storage
+│
+├── syllabus/                   ← source_folder: 'syllabus'
+│   ├── 小童軍支部訓練綱要.pdf
+│   ├── 幼童軍支部訓練綱要.pdf
+│   ├── 童軍支部訓練綱要.pdf
+│   ├── 深資童軍支部訓練綱要.pdf
+│   └── 樂行童軍支部訓練綱要.pdf
+│
+├── leader-training/            ← source_folder: 'leader-training'
+│   ├── 初級領袖訓練大綱.pdf
+│   ├── 中級領袖訓練大綱.pdf
+│   ├── 高級領袖訓練大綱.pdf
+│   └── 领袖木章訓練大綱.pdf
+│
+├── badge/                      ← source_folder: 'badge'
+│   ├── 專科徽章訓練教材.pdf
+│   └── 進度獎章標準.pdf
+│
+└── subsidy/                    ← source_folder: 'subsidy'
+    └── 訓練資助計劃.pdf
+```
 
 ---
 
-## 部署到 Vercel
+### 📂 Uniform（制服）
 
-1. 將程式碼推送到 GitHub
-2. 在 Vercel 匯入專案
-3. 設定環境變數
-4. 部署
+**目標用戶**：領袖、成員  
+**系統**：scout-uniform-assistant（待建立）  
+**Project 標記**：`uniform`
+
+```
+uniform-docs/                   ← Storage
+│
+├── handbook/                   ← source_folder: 'handbook'
+│   ├── 儀容與制服手冊.pdf
+│   └── 領巾佩戴指引.pdf
+│
+├── circulars/                  ← source_folder: 'circulars'
+│   └── 制服更新通告.pdf
+│
+└── badge-guide/                ← source_folder: 'badge-guide'
+    └── 徽章佩戴位置圖.pdf
+```
 
 ---
 
-## 疑難解答
+### 📂 Form（表格）
 
-### Q: 申請 Groq/Cohere 的網站打不開？
-A: 可能需要 VPN 連線
+**目標用戶**：領袖、成員  
+**系統**：scout-form-assistant（待建立）  
+**Project 標記**：`form`
 
-### Q: 向量化失敗？
-A: 檢查 Cohere API Key 是否正確
+```
+form-docs/                      ← Storage
+│
+├── member/                     ← source_folder: 'member'
+│   ├── 入會申請表.pdf
+│   ├── 家長同意書.pdf
+│   └── 個人資料更新表.pdf
+│
+├── activity/                   ← source_folder: 'activity'
+│   ├── 活動申請表.pdf
+│   ├── 旅行許可證.pdf
+│   └── 活動計劃書.pdf
+│
+└── administrative/             ← source_folder: 'administrative'
+    ├── 領袖委任申請表.pdf
+    └── 旅務委員會組成表.pdf
+```
 
-### Q: 問答沒結果？
-A: 確認已執行 match_documents SQL 函數
+---
+
+## 📊 資料庫欄位說明
+
+| 欄位 | 說明 | 範例 |
+|------|------|------|
+| `id` | 自動產生 | `uuid-xxx` |
+| `project` | 專案標記 | `policy` / `syllabus` / `uniform` / `form` |
+| `source_folder` | 資料夾路徑 | `POR` / `circulars/policy` / `syllabus` |
+| `source_file` | 原始檔名 | `POR_C_20251114_.pdf` |
+| `doc_title` | 文件標題 | `政策、組織及規條` |
+| `doc_date` | 發布日期 | `2025-11-14` |
+| `chunk_text` | 內容段落 | （實際文字） |
+| `embedding` | 向量 | （768維度數組） |
+| `created_at` | 建立時間 | `2026-05-28` |
+
+---
+
+## 🔍 搜尋範例
+
+### Policy 專案搜尋
+```javascript
+supabaseAdmin.rpc('match_documents', {
+  query_embedding: userQuestionVector,
+  project_filter: 'policy',
+  match_threshold: 0.7,
+  match_count: 5
+})
+```
+
+### Syllabus 專案搜尋
+```javascript
+supabaseAdmin.rpc('match_documents', {
+  query_embedding: userQuestionVector,
+  project_filter: 'syllabus',
+  match_threshold: 0.7,
+  match_count: 5
+})
+```
+
+### 限定資料夾搜尋（制服問題）
+```javascript
+supabaseAdmin.rpc('match_documents', {
+  query_embedding: userQuestionVector,
+  project_filter: 'policy',
+  folder_filter: 'uniform',
+  match_threshold: 0.7,
+  match_count: 5
+})
+```
+
+---
+
+## 📱 未來專案擴展
+
+| 專案名稱 | 網址 | 用途 |
+|----------|------|------|
+| scout-policy-assistant | 已建立 | 政策及指引問答 |
+| scout-syllabus-assistant | 待建立 | 訓練綱要問答 |
+| scout-uniform-assistant | 待建立 | 制服相關問答 |
+| scout-form-assistant | 待建立 | 表格相關問答 |
+
+---
+
+## ⚠️ 注意事項
+
+1. **所有專案共用同一個資料庫**，透過 `project` 欄位區分
+2. **Storage 也分開管理**，每個專案有自己的 bucket
+3. **更新文件時**，會新增記錄而非覆蓋舊記錄（方便追蹤歷史）
+4. **向量化消耗 Cohere 額度**，建議批量上傳而非單段落處理

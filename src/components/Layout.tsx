@@ -1,18 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import Chat from './Chat'
-import Upload from './Upload'
-import Embed from './Embed'
-
-type Tab = 'chat' | 'upload' | 'embed'
 
 export default function Layout() {
-  const [activeTab, setActiveTab] = useState<Tab>('chat')
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      {/* 頂部標題 */}
+      {/* 頂部 */}
       <header className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -25,63 +20,21 @@ export default function Layout() {
             </div>
           </div>
           
-          {/* 狀態指示 */}
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span>系統正常</span>
-          </div>
+          <Link 
+            href="/admin"
+            className="text-sm text-gray-500 hover:text-gray-700 transition flex items-center gap-1"
+          >
+            <span>⚙️</span>
+            管理
+          </Link>
         </div>
       </header>
 
-      {/* 分頁導航 */}
-      <div className="bg-white border-b">
-        <div className="max-w-6xl mx-auto px-4">
-          <nav className="flex gap-1">
-            <button
-              onClick={() => setActiveTab('chat')}
-              className={`px-5 py-4 font-medium transition border-b-2 ${
-                activeTab === 'chat'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              💬 問答
-            </button>
-            <button
-              onClick={() => setActiveTab('upload')}
-              className={`px-5 py-4 font-medium transition border-b-2 ${
-                activeTab === 'upload'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              📤 上傳文件
-            </button>
-            <button
-              onClick={() => setActiveTab('embed')}
-              className={`px-5 py-4 font-medium transition border-b-2 ${
-                activeTab === 'embed'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              🔄 向量化
-            </button>
-          </nav>
-        </div>
-      </div>
-
       {/* 主要內容 */}
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        {activeTab === 'chat' && (
-          <div className="bg-white rounded-2xl shadow-lg h-[600px] overflow-hidden">
-            <Chat />
-          </div>
-        )}
-        
-        {activeTab === 'upload' && <Upload />}
-        
-        {activeTab === 'embed' && <Embed />}
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-2xl shadow-lg h-[600px] overflow-hidden">
+          <Chat />
+        </div>
       </main>
 
       {/* 底部 */}
