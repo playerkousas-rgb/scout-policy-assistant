@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       const keywords = question.toLowerCase().split(/\s+/)
       const scoredResults = fallbackResults.map(r => {
         const text = r.chunk_text.toLowerCase()
-        const score = keywords.filter(k => text.includes(k)).length
+        const score = keywords.filter((k: string) => text.includes(k)).length
         return { ...r, score }
       }).sort((a, b) => b.score - a.score).slice(0, 3)
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. 組合相關內容作為上下文
-    const contextTexts = searchResults.map((r: any) => r.chunk_text)
+    const contextTexts = searchResults.map((r: { chunk_text: string }) => r.chunk_text)
 
     // 4. 送給 Groq 生成回答
     const answer = await generateResponse(question, contextTexts)
@@ -77,14 +77,14 @@ export async function POST(request: NextRequest) {
     // 5. 返回答案和來源
     return NextResponse.json({
       answer,
-      sources: searchResults.map((r: any) => ({
+      sources: searchResults.map((r: { doc_title: string; source_folder: string; similarity: number }) => ({
         title: r.doc_title,
         folder: r.source_folder,
         similarity: r.similarity
       }))
     })
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(
       { error: '伺服器錯誤，請稍後再試' },
