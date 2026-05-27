@@ -1,79 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/embedding'
-import { getEmbeddings } from '@/lib/cohere'
+import { getEmbedding } from '@/lib/cohere'
+import { generateResponse } from '@/lib/groq'
+
+export const runtime = 'edge'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const chunks: Array<{
-      text: string
-      folder: string
-      file: string
-      title: string
-      date?: string
-      project?: string
-    }> = body.chunks
+    const { question } = await request.json()
 
-    if (!chunks || !Array.isArray(chunks) || chunks.length === 0) {
-      return NextResponse.json({ error: '請提供要向量化的內容' }, { status: 400 })
+    if (!question || question.trim() === '') {
+      return NextResponse.json(
+        { error: '請輸入問題' },
+        { status: 400 }
+      )
     }
 
-    const results: Array<{ success: boolean; text: string; id?: string; error?: string }> = []
-    const batchSize = 96
+    // 1. 將用戶問題轉成向量
+    const queryEmbedding = await getEmbedding(question)
 
-    for (let i = 0; i < chunks.length; i += batchSize) {
-      const batch = chunks.slice(i, i + batchSize)
-      const texts = batch.map(c => c.text)
+    // 2. 在 Supabase 中搜尋相似內容
+    const { data: searchResults, error: searchError } = await supabaseAdmin.rpc(
+      'match_documents',
+      {
+        query_embedding: queryEmbedding,
+        match_threshold: 0.7,
+        match_count: 5,
+        project_filter: 'policy'
+      }
+    )
 
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}, ${batch.length} chunks...`)
+    // 如果向量搜尋失敗，使用 fallback
+    if (searchError || !searchResults || searchResults.length === 0) {
+      console.log('Fallback to basic search:', searchError)
+      
+      // 簡單的全文搜尋作為後備
+      const { data: fallbackResults } = await supabaseAdmin
+        .from('document_chunks')
+        .select('chunk_text, doc_title, source_folder')
+        .eq('project', 'policy')
+        .limit(5)
 
-      try {
-        const embeddings = await getEmbeddings(texts)
-
-        const insertData = batch.map((item: typeof batch[0], idx: number) => ({
-          project: item.project || 'policy',
-          source_folder: item.folder,
-          source_file: item.file,
-          doc_title: item.title,
-          doc_date: item.date || null,
-          chunk_text: item.text,
-          embedding: embeddings[idx]
-        }))
-
-        const { data, error } = await supabaseAdmin
-          .from('document_chunks')
-          .insert(insertData)
-          .select('id')
-
-        if (error) {
-          console.error('Insert error:', error)
-          results.push({ success: false, text: batch[0].text.substring(0, 50), error: error.message })
-        } else {
-          batch.forEach((item: typeof batch[0], idx: number) => {
-            results.push({ success: true, id: data?.[idx]?.id, text: item.text.substring(0, 50) })
-          })
-        }
-      } catch (batchError) {
-        const msg = batchError instanceof Error ? batchError.message : 'Unknown error'
-        console.error('Batch error:', batchError)
-        batch.forEach((item: typeof batch[0]) => {
-          results.push({ success: false, text: item.text.substring(0, 50), error: msg })
+      if (!fallbackResults || fallbackResults.length === 0) {
+        return NextResponse.json({
+          answer: '抱歉，目前資料庫中沒有找到相關內容。請先上傳政策文件。',
+          sources: []
         })
       }
+
+      // 簡單的關鍵詞匹配
+      const keywords = question.toLowerCase().split(/\s+/)
+      const scoredResults = fallbackResults.map(r => {
+        const text = r.chunk_text.toLowerCase()
+        const score = keywords.filter((k: string) => text.includes(k)).length
+        return { ...r, score }
+      }).sort((a, b) => b.score - a.score).slice(0, 3)
+
+      const contextTexts = scoredResults.map(r => r.chunk_text)
+      const answer = await generateResponse(question, contextTexts)
+
+      return NextResponse.json({
+        answer,
+        sources: scoredResults.map(r => ({
+          title: r.doc_title,
+          folder: r.source_folder
+        }))
+      })
     }
 
-    const successCount = results.filter(r => r.success).length
+    // 3. 組合相關內容作為上下文
+    const contextTexts = searchResults.map((r: { chunk_text: string }) => r.chunk_text)
 
+    // 4. 送給 Groq 生成回答
+    const answer = await generateResponse(question, contextTexts)
+
+    // 5. 返回答案和來源
     return NextResponse.json({
-      success: true,
-      total: chunks.length,
-      succeeded: successCount,
-      failed: chunks.length - successCount,
-      results
+      answer,
+      sources: searchResults.map((r: { doc_title: string; source_folder: string; similarity: number }) => ({
+        title: r.doc_title,
+        folder: r.source_folder,
+        similarity: r.similarity
+      }))
     })
+
   } catch (error) {
-    const msg = error instanceof Error ? error.message : '向量化失敗'
-    console.error('Embed error:', error)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('Chat API error:', error)
+    return NextResponse.json(
+      { error: '伺服器錯誤，請稍後再試' },
+      { status: 500 }
+    )
   }
 }

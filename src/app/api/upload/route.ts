@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { getEmbedding } from '@/lib/gemini'
+import { supabaseAdmin } from '@/lib/embedding'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,16 +15,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 這是一個簡化的上傳處理
-    // 實際專案需要：
-    // 1. 提取 PDF 文字（需要 Server-Side PDF 解析器）
-    // 2. 分段處理
-    // 3. 向量化並存入資料庫
-
-    const buffer = await file.arrayBuffer()
-    
     // 上傳到 Supabase Storage
+    const buffer = await file.arrayBuffer()
     const fileName = `${folder}/${file.name}`
+    
     const { data: uploadData, error: uploadError } = await supabaseAdmin
       .storage
       .from('policy-docs')
@@ -46,17 +39,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '檔案上傳成功！請手動執行向量化處理。',
+      message: '檔案上傳成功！請在「向量化」頁面將內容轉換成向量。',
       url: urlData.publicUrl,
       fileName: file.name,
-      note: 'PDF 文字提取需要在 Server-Side 處理，請使用 pdf-parse 套件。'
+      folder: folder
     })
 
-  } catch (error: any) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : '上傳失敗'
     console.error('Upload error:', error)
-    return NextResponse.json(
-      { error: error.message || '上傳失敗' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
