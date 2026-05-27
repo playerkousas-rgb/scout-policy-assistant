@@ -7,55 +7,69 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const folder = formData.get('folder') as string || 'general'
-    const title = formData.get('title') as string || file.name.replace('.pdf', '')
+    const title = formData.get('title') as string || file.name.replace(/\.(pdf|docx)$/i, '')
 
     if (!file) {
       return NextResponse.json({ error: '請選擇檔案' }, { status: 400 })
     }
 
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      return NextResponse.json({ error: '請上傳 PDF 檔案' }, { status: 400 })
+    const fileName = file.name.toLowerCase()
+    const isPdf = fileName.endsWith('.pdf')
+    const isDocx = fileName.endsWith('.docx')
+
+    if (!isPdf && !isDocx) {
+      return NextResponse.json({ error: '請上傳 PDF 或 Word (.docx) 檔案' }, { status: 400 })
     }
 
-    // 1. 讀取 PDF 並提取文字
+    // 1. 讀取並提取文字
     const arrayBuffer = await file.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
-    
-    const pdfjsLib = await import('pdfjs-dist')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-    
-    const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise
     let fullText = ''
-    
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i)
-      const textContent = await page.getTextContent()
-      const pageText = textContent.items
-        .filter((item: any) => item.str)
-        .map((item: any) => item.str)
-        .join(' ')
-      fullText += pageText + '\n\n'
+    let pageCount = 1
+
+    if (isPdf) {
+      // PDF 處理
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+      
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+      pageCount = pdf.numPages
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const textContent = await page.getTextContent()
+        const pageText = textContent.items
+          .filter((item: any) => item.str)
+          .map((item: any) => item.str)
+          .join(' ')
+        fullText += pageText + '\n\n'
+      }
+    } else {
+      // Word (.docx) 處理 - 更簡單
+      const mammoth = await import('mammoth')
+      const result = await mammoth.extractRawText({ arrayBuffer })
+      fullText = result.value
+      pageCount = Math.ceil(fullText.length / 500) // 估算
     }
 
     if (!fullText.trim()) {
       return NextResponse.json({ 
-        error: '無法從 PDF 提取文字內容，可能是掃描檔或其他格式' 
+        error: '無法從檔案提取文字內容' 
       }, { status: 400 })
     }
 
-    console.log(`Extracted ${fullText.length} characters from PDF`)
+    console.log(`Extracted ${fullText.length} characters from ${isPdf ? 'PDF' : 'Word'}`)
 
     // 2. 分段處理
     const chunks = splitIntoChunks(fullText)
     console.log(`Split into ${chunks.length} chunks`)
 
-    // 3. 上傳 PDF 到 Storage
-    const fileName = `${folder}/${Date.now()}_${file.name}`
+    // 3. 上傳原始檔案到 Storage
+    const storageFileName = `${folder}/${Date.now()}_${file.name}`
     const { error: uploadError } = await supabaseAdmin
       .storage
       .from('policy-docs')
-      .upload(fileName, uint8Array, {
-        contentType: 'application/pdf',
+      .upload(storageFileName, arrayBuffer, {
+        contentType: isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         upsert: true
       })
 
@@ -64,7 +78,7 @@ export async function POST(request: NextRequest) {
       const { data: urlData } = supabaseAdmin
         .storage
         .from('policy-docs')
-        .getPublicUrl(fileName)
+        .getPublicUrl(storageFileName)
       storageUrl = urlData.publicUrl
     }
 
@@ -96,19 +110,13 @@ export async function POST(request: NextRequest) {
           .select('id')
 
         if (insertError) {
-          console.error('Insert error:', insertError)
           results.push({ success: false, error: insertError.message })
         } else {
-          batch.forEach(() => {
-            results.push({ success: true })
-          })
+          batch.forEach(() => results.push({ success: true }))
         }
       } catch (batchError) {
         const msg = batchError instanceof Error ? batchError.message : 'Unknown error'
-        console.error('Batch error:', batchError)
-        batch.forEach(() => {
-          results.push({ success: false, error: msg })
-        })
+        batch.forEach(() => results.push({ success: false, error: msg }))
       }
     }
 
@@ -118,7 +126,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: '成功處理！',
       stats: {
-        totalPages: pdf.numPages,
+        totalPages: pageCount,
         totalChunks: chunks.length,
         stored: successCount,
         storageUrl
@@ -146,12 +154,10 @@ function splitIntoChunks(text: string): Array<{ text: string }> {
         chunks.push({ text: currentChunk.trim() })
         currentChunk = ''
       }
-      const sentences = trimmed.split(/(?<=[。！？])/)
+      const sentences = trimmed.split(/(?<=[。！？.!?])/)
       for (const sentence of sentences) {
         if (currentChunk.length + sentence.length > 600) {
-          if (currentChunk.trim()) {
-            chunks.push({ text: currentChunk.trim() })
-          }
+          if (currentChunk.trim()) chunks.push({ text: currentChunk.trim() })
           currentChunk = sentence
         } else {
           currentChunk += sentence
@@ -165,9 +171,6 @@ function splitIntoChunks(text: string): Array<{ text: string }> {
     }
   }
   
-  if (currentChunk.trim()) {
-    chunks.push({ text: currentChunk.trim() })
-  }
-  
+  if (currentChunk.trim()) chunks.push({ text: currentChunk.trim() })
   return chunks
 }

@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+
+const ADMIN_PASSWORD = '0728'
 
 interface UploadResult {
   success: boolean
@@ -14,7 +16,61 @@ interface UploadResult {
   }
 }
 
-export default function AdminPage() {
+// 登入頁面
+function LoginPage({ onLogin }: { onLogin: () => void }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState(false)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password === ADMIN_PASSWORD) {
+      sessionStorage.setItem('adminLoggedIn', 'true')
+      onLogin()
+    } else {
+      setError(true)
+      setPassword('')
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-white text-3xl">🔒</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800">管理員登入</h1>
+          <p className="text-sm text-gray-500">請輸入管理員密碼</p>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(false) }}
+            placeholder="輸入密碼"
+            className={`w-full px-4 py-3 border rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 ${
+              error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+            }`}
+            autoFocus
+          />
+          {error && (
+            <p className="text-red-500 text-sm text-center mt-2">密碼錯誤，請重試</p>
+          )}
+          <button
+            type="submit"
+            className="w-full mt-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition font-medium"
+          >
+            登入
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// 上傳頁面
+function UploadPage({ onLogout }: { onLogout: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [folder, setFolder] = useState('POR')
   const [title, setTitle] = useState('')
@@ -34,7 +90,7 @@ export default function AdminPage() {
 
   const handleUpload = async () => {
     if (!file) {
-      setError('請選擇 PDF 檔案')
+      setError('請選擇檔案')
       return
     }
 
@@ -45,7 +101,7 @@ export default function AdminPage() {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('folder', folder)
-    formData.append('title', title || file.name.replace('.pdf', ''))
+    formData.append('title', title || file.name.replace(/\.(pdf|docx)$/i, ''))
 
     try {
       const response = await fetch('/admin/api/upload-process', {
@@ -84,12 +140,20 @@ export default function AdminPage() {
             </div>
           </div>
           
-          <Link 
-            href="/"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            返回問答頁面
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link 
+              href="/"
+              className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+            >
+              返回問答
+            </Link>
+            <button
+              onClick={onLogout}
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+            >
+              登出
+            </button>
+          </div>
         </div>
       </header>
 
@@ -110,7 +174,7 @@ export default function AdminPage() {
               <select
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {folders.map(f => (
                   <option key={f.value} value={f.value}>{f.label}</option>
@@ -128,22 +192,19 @@ export default function AdminPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="例如：童軍旅財政管理指引"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                如不填寫，會使用檔案名稱
-              </p>
             </div>
 
             {/* 選擇檔案 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                選擇 PDF 檔案
+                選擇檔案（PDF 或 Word）
               </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition cursor-pointer">
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition">
                 <input
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.docx"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="hidden"
                   id="file-upload"
@@ -158,7 +219,7 @@ export default function AdminPage() {
                       </p>
                     </div>
                   ) : (
-                    <p className="text-gray-500">點擊選擇 PDF 檔案</p>
+                    <p className="text-gray-500">點擊選擇 PDF 或 Word 檔案</p>
                   )}
                 </label>
               </div>
@@ -168,7 +229,7 @@ export default function AdminPage() {
             <button
               onClick={handleUpload}
               disabled={!file || uploading}
-              className="w-full py-4 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium text-lg"
+              className="w-full py-4 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition font-medium text-lg"
             >
               {uploading ? (
                 <span className="flex items-center justify-center gap-3">
@@ -180,21 +241,19 @@ export default function AdminPage() {
               )}
             </button>
 
-            {/* 進度說明 */}
             {uploading && (
               <div className="bg-blue-50 rounded-xl p-4">
                 <h4 className="font-medium text-blue-800 mb-2">處理流程：</h4>
                 <ol className="text-sm text-blue-700 space-y-1">
-                  <li>1️⃣ 讀取 PDF 檔案</li>
+                  <li>1️⃣ 讀取檔案</li>
                   <li>2️⃣ 提取文字內容</li>
-                  <li>3️⃣ 分割成小段落</li>
-                  <li>4️⃣ 轉換為向量（向量化）</li>
+                  <li>3️⃣ 分割成段落</li>
+                  <li>4️⃣ 向量化</li>
                   <li>5️⃣ 存入資料庫</li>
                 </ol>
               </div>
             )}
 
-            {/* 成功結果 */}
             {result?.success && (
               <div className="bg-green-50 rounded-xl p-6">
                 <div className="flex items-center gap-3 mb-4">
@@ -210,7 +269,7 @@ export default function AdminPage() {
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div className="bg-white rounded-lg p-3">
                       <div className="text-2xl font-bold text-green-700">{result.stats.totalPages}</div>
-                      <div className="text-xs text-gray-500">頁數</div>
+                      <div className="text-xs text-gray-500">頁數/章節</div>
                     </div>
                     <div className="bg-white rounded-lg p-3">
                       <div className="text-2xl font-bold text-green-700">{result.stats.totalChunks}</div>
@@ -225,28 +284,35 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* 錯誤 */}
             {error && (
               <div className="bg-red-50 rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">❌</span>
-                  <p className="text-red-700">{error}</p>
-                </div>
+                <p className="text-red-700">❌ {error}</p>
               </div>
             )}
           </div>
         </div>
-
-        {/* 提示 */}
-        <div className="mt-6 bg-yellow-50 rounded-xl p-4">
-          <h4 className="font-medium text-yellow-800 mb-2">💡 提示</h4>
-          <ul className="text-sm text-yellow-700 space-y-1">
-            <li>• 只支援 PDF 格式（文字型 PDF，掃描檔可能無法處理）</li>
-            <li>• 上傳新版本時，會新增記錄而不覆蓋舊記錄</li>
-            <li>• 如要更新內容，建議先在問答頁面測試是否正確</li>
-          </ul>
-        </div>
       </main>
     </div>
   )
+}
+
+// 主元件
+export default function AdminPage() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    const loggedIn = sessionStorage.getItem('adminLoggedIn') === 'true'
+    setIsLoggedIn(loggedIn)
+  }, [])
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('adminLoggedIn')
+    setIsLoggedIn(false)
+  }
+
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={() => setIsLoggedIn(true)} />
+  }
+
+  return <UploadPage onLogout={handleLogout} />
 }
