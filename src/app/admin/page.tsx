@@ -33,14 +33,14 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#02133E' }}>
+      <div className="bg-[#0a1a3a] rounded-2xl border border-[#1e3a5f] p-8 w-full max-w-sm">
         <div className="text-center mb-6">
           <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-white text-3xl">🔒</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-800">管理員登入</h1>
-          <p className="text-sm text-gray-500">請輸入管理員密碼</p>
+          <h1 className="text-xl font-bold text-white">管理員登入</h1>
+          <p className="text-sm text-gray-400">請輸入管理員密碼</p>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -50,12 +50,12 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             onChange={(e) => { setPassword(e.target.value); setError(false) }}
             placeholder="輸入密碼"
             className={`w-full px-4 py-3 border rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 ${
-              error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              error ? 'border-red-500 focus:ring-red-500' : 'border-[#1e3a5f] bg-[#02133E] text-white focus:ring-green-500'
             }`}
             autoFocus
           />
           {error && (
-            <p className="text-red-500 text-sm text-center mt-2">密碼錯誤，請重試</p>
+            <p className="text-red-400 text-sm text-center mt-2">密碼錯誤，請重試</p>
           )}
           <button
             type="submit"
@@ -101,7 +101,7 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('folder', folder)
-    formData.append('title', title || file.name.replace(/\.(pdf|docx)$/i, ''))
+    formData.append('title', title || file.name.replace(/\.(pdf|docx|md)$/i, ''))
 
     try {
       const response = await fetch('/admin/api/upload-process', {
@@ -126,30 +126,30 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="min-h-screen" style={{ backgroundColor: '#02133E' }}>
       {/* 頂部 */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-[#0a1a3a] border-b border-[#1e3a5f]">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
               <span className="text-white text-xl">⚙️</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-800">管理員介面</h1>
-              <p className="text-xs text-gray-500">文件管理</p>
+              <h1 className="text-xl font-bold text-white">管理員介面</h1>
+              <p className="text-xs text-gray-400">文件管理</p>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
             <Link 
               href="/"
-              className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+              className="px-4 py-2 text-blue-400 hover:bg-[#1e3a5f] rounded-lg transition"
             >
               返回問答
             </Link>
             <button
               onClick={onLogout}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+              className="px-4 py-2 text-gray-400 hover:bg-[#1e3a5f] rounded-lg transition"
             >
               登出
             </button>
@@ -159,32 +159,32 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
 
       {/* 主要內容 */}
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">📤 上傳政策文件</h2>
-          <p className="text-gray-500 mb-6">
-            上傳 PDF 檔案，系統會自動提取內容、向量化並存入資料庫
+        <div className="bg-[#0a1a3a] rounded-2xl border border-[#1e3a5f] p-8">
+          <h2 className="text-xl font-bold text-white mb-2">📤 上傳政策文件</h2>
+          <p className="text-gray-400 mb-6">
+            上傳 PDF、Word 或 Markdown 檔案，系統會自動處理
           </p>
 
           <div className="space-y-6">
             {/* 選擇分類 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 文件分類
               </label>
               <select
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 bg-[#02133E] border border-[#1e3a5f] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {folders.map(f => (
-                  <option key={f.value} value={f.value}>{f.label}</option>
+                  <option key={f.value} value={f.value} style={{ background: '#02133E' }}>{f.label}</option>
                 ))}
               </select>
             </div>
 
             {/* 文件標題 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 文件標題（選填）
               </label>
               <input
@@ -192,19 +192,19 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="例如：童軍旅財政管理指引"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 bg-[#02133E] border border-[#1e3a5f] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             {/* 選擇檔案 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                選擇檔案（PDF 或 Word）
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                選擇檔案（PDF / Word / Markdown）
               </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition">
+              <div className="border-2 border-dashed border-[#1e3a5f] rounded-xl p-8 text-center hover:border-blue-500 transition">
                 <input
                   type="file"
-                  accept=".pdf,.docx"
+                  accept=".pdf,.docx,.md"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="hidden"
                   id="file-upload"
@@ -213,13 +213,13 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
                   <div className="text-4xl mb-3">📄</div>
                   {file ? (
                     <div>
-                      <p className="font-medium text-blue-600">{file.name}</p>
+                      <p className="font-medium text-blue-400">{file.name}</p>
                       <p className="text-sm text-gray-500">
                         {(file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
                   ) : (
-                    <p className="text-gray-500">點擊選擇 PDF 或 Word 檔案</p>
+                    <p className="text-gray-500">點擊選擇檔案</p>
                   )}
                 </label>
               </div>
@@ -234,7 +234,7 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
               {uploading ? (
                 <span className="flex items-center justify-center gap-3">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  處理中，請稍候...
+                  處理中...
                 </span>
               ) : (
                 '🚀 上傳並處理'
@@ -242,9 +242,9 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
             </button>
 
             {uploading && (
-              <div className="bg-blue-50 rounded-xl p-4">
-                <h4 className="font-medium text-blue-800 mb-2">處理流程：</h4>
-                <ol className="text-sm text-blue-700 space-y-1">
+              <div className="bg-[#1e3a5f] rounded-xl p-4">
+                <h4 className="font-medium text-blue-300 mb-2">處理流程：</h4>
+                <ol className="text-sm text-gray-400 space-y-1">
                   <li>1️⃣ 讀取檔案</li>
                   <li>2️⃣ 提取文字內容</li>
                   <li>3️⃣ 分割成段落</li>
@@ -255,28 +255,28 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
             )}
 
             {result?.success && (
-              <div className="bg-green-50 rounded-xl p-6">
+              <div className="bg-green-900/30 rounded-xl p-6 border border-green-700">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
                     <span className="text-white text-2xl">✅</span>
                   </div>
                   <div>
-                    <h4 className="font-bold text-green-800">上傳成功！</h4>
-                    <p className="text-sm text-green-600">文件已可被搜尋</p>
+                    <h4 className="font-bold text-green-400">上傳成功！</h4>
+                    <p className="text-sm text-green-300/70">文件已可被搜尋</p>
                   </div>
                 </div>
                 {result.stats && (
                   <div className="grid grid-cols-3 gap-4 text-center">
-                    <div className="bg-white rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-700">{result.stats.totalPages}</div>
-                      <div className="text-xs text-gray-500">頁數/章節</div>
+                    <div className="bg-[#0a1a3a] rounded-lg p-3">
+                      <div className="text-2xl font-bold text-green-400">{result.stats.totalPages}</div>
+                      <div className="text-xs text-gray-500">頁數</div>
                     </div>
-                    <div className="bg-white rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-700">{result.stats.totalChunks}</div>
+                    <div className="bg-[#0a1a3a] rounded-lg p-3">
+                      <div className="text-2xl font-bold text-green-400">{result.stats.totalChunks}</div>
                       <div className="text-xs text-gray-500">段落數</div>
                     </div>
-                    <div className="bg-white rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-700">{result.stats.stored}</div>
+                    <div className="bg-[#0a1a3a] rounded-lg p-3">
+                      <div className="text-2xl font-bold text-green-400">{result.stats.stored}</div>
                       <div className="text-xs text-gray-500">已存入</div>
                     </div>
                   </div>
@@ -285,11 +285,21 @@ function UploadPage({ onLogout }: { onLogout: () => void }) {
             )}
 
             {error && (
-              <div className="bg-red-50 rounded-xl p-4">
-                <p className="text-red-700">❌ {error}</p>
+              <div className="bg-red-900/30 rounded-xl p-4 border border-red-700">
+                <p className="text-red-400">❌ {error}</p>
               </div>
             )}
           </div>
+        </div>
+
+        {/* 提示 */}
+        <div className="mt-6 bg-[#0a1a3a] rounded-xl p-4 border border-[#1e3a5f]">
+          <h4 className="font-medium text-yellow-400 mb-2">💡 支援格式</h4>
+          <ul className="text-sm text-gray-400 space-y-1">
+            <li>• PDF（文字型 PDF）</li>
+            <li>• Word（.docx）</li>
+            <li>• Markdown（.md）← 最推薦！處理最穩定</li>
+          </ul>
         </div>
       </main>
     </div>
