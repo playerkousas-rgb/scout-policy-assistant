@@ -16,6 +16,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 檢查 API Key 是否已設定
+    if (!process.env.GROQ_API_KEY || !process.env.COHERE_API_KEY) {
+      return NextResponse.json({
+        answer: '系統尚未完成設定，請聯絡管理員。',
+        sources: []
+      })
+    }
+
     // 1. 將用戶問題轉成向量
     const queryEmbedding = await getEmbedding(question)
 
@@ -34,7 +42,6 @@ export async function POST(request: NextRequest) {
     if (searchError || !searchResults || searchResults.length === 0) {
       console.log('Fallback to basic search:', searchError)
       
-      // 簡單的全文搜尋作為後備
       const { data: fallbackResults } = await supabaseAdmin
         .from('document_chunks')
         .select('chunk_text, doc_title, source_folder')
@@ -48,7 +55,6 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // 簡單的關鍵詞匹配
       const keywords = question.toLowerCase().split(/\s+/)
       const scoredResults = fallbackResults.map(r => {
         const text = r.chunk_text.toLowerCase()
